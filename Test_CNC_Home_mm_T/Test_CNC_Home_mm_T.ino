@@ -30,6 +30,10 @@
   HOME                  = home X, Y, Z
   HELP                  = print commands and settings
 
+  Relay:
+  - Relay turns ON whenever E/extruder motor is active.
+  - Relay turns OFF after E/extruder movement finishes.
+
   Rules:
   - X/Y are absolute positions.
   - Z is absolute position and must be sent separately.
@@ -59,6 +63,12 @@ const int zsteppin = 9;
 const int xHomeSwitchPin = 10;
 const int yHomeSwitchPin = 11;
 const int zHomeSwitchPin = 12;
+
+// Relay pin
+const int relayPin = A3;
+
+// Change this to false if your relay module is active LOW
+const bool RELAY_ACTIVE_HIGH = true;
 
 // Driver setting
 const float DRIVER_STEPS_PER_REV = 800.0;
@@ -102,6 +112,14 @@ float floatAbs(float value) {
   return value;
 }
 
+void relayOn() {
+  digitalWrite(relayPin, RELAY_ACTIVE_HIGH ? HIGH : LOW);
+}
+
+void relayOff() {
+  digitalWrite(relayPin, RELAY_ACTIVE_HIGH ? LOW : HIGH);
+}
+
 void setup() {
   pinMode(extruderdirpin, OUTPUT);
   pinMode(extrudersteppin, OUTPUT);
@@ -118,6 +136,9 @@ void setup() {
   pinMode(xHomeSwitchPin, INPUT_PULLUP);
   pinMode(yHomeSwitchPin, INPUT_PULLUP);
   pinMode(zHomeSwitchPin, INPUT_PULLUP);
+
+  pinMode(relayPin, OUTPUT);
+  relayOff();
 
   digitalWrite(extrudersteppin, LOW);
   digitalWrite(xsteppin, LOW);
@@ -174,6 +195,11 @@ void printHelp() {
   Serial.println(F("EF200                 = set default wire-feed speed"));
   Serial.println(F("HOME                  = home X, Y, Z"));
   Serial.println(F("HELP                  = print this menu"));
+  Serial.println();
+
+  Serial.println(F("Relay:"));
+  Serial.println(F("Relay ON during E/extruder movement."));
+  Serial.println(F("Relay OFF when E/extruder movement finishes."));
   Serial.println();
 
   Serial.println(F("Current speeds:"));
@@ -308,9 +334,15 @@ void moveEExactOnly(float eMM, float eSpeedMMmin) {
   Serial.print(F("   interval us = "));
   Serial.println(eIntervalUs);
 
+  relayOn();
+  Serial.println(F("Relay ON"));
+
   for (long i = 0; i < eSteps; i++) {
     pulsePin(extrudersteppin, eIntervalUs);
   }
+
+  relayOff();
+  Serial.println(F("Relay OFF"));
 
   Serial.println(F("OK"));
 }
@@ -484,6 +516,13 @@ void moveXYWithExtrusion(
   bool xStoppedByHome = false;
   bool yStoppedByHome = false;
 
+  bool relayNeeded = (eSteps > 0);
+
+  if (relayNeeded) {
+    relayOn();
+    Serial.println(F("Relay ON"));
+  }
+
   for (long i = 0; i < maxSteps; i++) {
     if (xMoveMM < 0 && !xStoppedByHome && homeSwitchPressed(xHomeSwitchPin)) {
       currentX = 0.0;
@@ -534,6 +573,11 @@ void moveXYWithExtrusion(
     if (stepIntervalUs > PULSE_WIDTH_US) {
       delayMicroseconds(stepIntervalUs - PULSE_WIDTH_US);
     }
+  }
+
+  if (relayNeeded) {
+    relayOff();
+    Serial.println(F("Relay OFF"));
   }
 
   if (moveX && !xStoppedByHome) currentX = targetX;
